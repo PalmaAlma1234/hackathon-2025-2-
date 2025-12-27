@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: qazkids_db
+    environment:
+      POSTGRES_USER: qazkids
+      POSTGRES_PASSWORD: qazkids_dev_password
+      POSTGRES_DB: qazkids
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qazkids"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: qazkids_cache
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build: .
+    container_name: qazkids_backend
+    environment:
+      DATABASE_URL: postgresql://qazkids:qazkids_dev_password@postgres:5432/qazkids
+      SECRET_KEY: your-secret-key-change-in-production
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend (Optional - if you want to serve HTML)
+  frontend:
+    image: nginx:alpine
+    container_name: qazkids_frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./Cap edu:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: qazkids_network
